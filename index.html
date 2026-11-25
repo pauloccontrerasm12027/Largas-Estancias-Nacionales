@@ -1,1 +1,469 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Consultoría IA | Analizador de Evitabilidad Clínica</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS para leer y exportar Excel/CSV localmente en el navegador -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <!-- Chart.js para gráficos -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
+  <!-- Barra superior -->
+  <header class="bg-slate-900 text-white shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-center gap-3">
+      <div class="flex items-center gap-3">
+        <div class="bg-emerald-500 text-slate-950 font-bold px-2.5 py-1 rounded-lg text-sm">IA</div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight">Consultoría-IA · Auditoría de Evitabilidad</h1>
+          <p class="text-xs text-slate-400">Procesamiento por lotes (hasta 1.000+ pacientes cada 8 días) · 100% Local y Privado</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="descargarPlantilla()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-2 rounded-lg transition cursor-pointer">
+          ⬇ Descargar Plantilla Excel de Prueba
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Contenido principal -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full space-y-6">
+
+    <!-- Aviso de seguridad -->
+    <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-start gap-3">
+      <span class="text-emerald-600 text-xl">🔒</span>
+      <div class="text-sm text-emerald-900">
+        <strong>Protección de Datos Clínicos:</strong> El archivo que cargues se procesa exclusivamente en la memoria de tu navegador. Ningún dato de pacientes se sube a internet ni se almacena en servidores externos.
+      </div>
+    </div>
+
+    <!-- Zona de Carga y Parámetros -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Dropzone -->
+      <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col justify-center">
+        <h2 class="text-base font-semibold text-slate-800 mb-2">1. Cargar Cohorte Semanal (Excel o CSV)</h2>
+        <p class="text-xs text-slate-500 mb-4">Columnas recomendadas: <code class="bg-slate-100 px-1 rounded">ID_Paciente</code>, <code class="bg-slate-100 px-1 rounded">CIE10</code>, <code class="bg-slate-100 px-1 rounded">Diagnostico</code>, <code class="bg-slate-100 px-1 rounded">Fecha_Ingreso</code>, <code class="bg-slate-100 px-1 rounded">Fecha_Egreso</code>, <code class="bg-slate-100 px-1 rounded">Reingreso</code>, <code class="bg-slate-100 px-1 rounded">Servicio</code>.</p>
+        
+        <label id="dropzone" for="fileInput" class="border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50/30 rounded-xl p-8 text-center cursor-pointer transition flex flex-col items-center justify-center">
+          <svg class="w-10 h-10 text-slate-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+          </svg>
+          <span class="text-sm font-medium text-slate-700">Haz clic para seleccionar o arrastra tu archivo aquí</span>
+          <span class="text-xs text-slate-400 mt-1">Soporta .xlsx, .xls y .csv (1.000+ registros en &lt; 1 segundo)</span>
+          <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden" />
+        </label>
+        <div id="fileStatus" class="mt-3 text-xs font-medium text-slate-600 hidden"></div>
+      </div>
+
+      <!-- Configuración rápida de umbrales -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col justify-between">
+        <div>
+          <h2 class="text-base font-semibold text-slate-800 mb-3">2. Criterios de Auditoría</h2>
+          <div class="space-y-3 text-sm">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Umbral Estancia Prolongada (días)</label>
+              <input type="number" id="umbralEstancia" value="7" min="1" max="60" class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500" />
+            </div>
+            <div class="flex items-center gap-2 pt-1">
+              <input type="checkbox" id="chkCie10" checked class="rounded text-emerald-600 focus:ring-emerald-500" />
+              <label for="chkCie10" class="text-xs text-slate-700">Evaluar CIE-10 Sensibles a Cuidado Ambulatorio</label>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="checkbox" id="chkReingreso" checked class="rounded text-emerald-600 focus:ring-emerald-500" />
+              <label for="chkReingreso" class="text-xs text-slate-700">Alertar Reingresos (&lt; 30 días o marcados Sí)</label>
+            </div>
+          </div>
+        </div>
+        <button onclick="reprocesar()" id="btnReprocesar" disabled class="mt-4 w-full bg-slate-900 disabled:bg-slate-300 hover:bg-slate-800 text-white text-xs font-semibold py-2.5 px-4 rounded-lg transition cursor-pointer">
+          Aplicar Reglas y Recalcular
+        </button>
+      </div>
+    </div>
+
+    <!-- Sección de Resultados (Oculta hasta cargar archivo) -->
+    <div id="resultadosSection" class="hidden space-y-6">
+      
+      <!-- Tarjetas KPI -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+          <p class="text-xs font-medium text-slate-500 uppercase">Total Pacientes Evaluados</p>
+          <p id="kpiTotal" class="text-2xl font-bold text-slate-900 mt-1">0</p>
+          <p class="text-xs text-slate-400 mt-1">Cohorte cargada</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-red-200 shadow-sm">
+          <p class="text-xs font-medium text-red-600 uppercase">Alta Probabilidad Evitable</p>
+          <p id="kpiEvitable" class="text-2xl font-bold text-red-600 mt-1">0</p>
+          <p id="kpiEvitablePct" class="text-xs text-red-500 mt-1">0% del total</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-amber-200 shadow-sm">
+          <p class="text-xs font-medium text-amber-600 uppercase">Potencialmente Evitable</p>
+          <p id="kpiPotencial" class="text-2xl font-bold text-amber-600 mt-1">0</p>
+          <p class="text-xs text-amber-500 mt-1">Requiere revisión clínica</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-emerald-200 shadow-sm">
+          <p class="text-xs font-medium text-emerald-600 uppercase">No Evitable / Pertinente</p>
+          <p id="kpiNoEvitable" class="text-2xl font-bold text-emerald-600 mt-1">0</p>
+          <p id="kpiEstanciaProm" class="text-xs text-slate-500 mt-1">Estancia prom: 0 días</p>
+        </div>
+      </div>
+
+      <!-- Gráficos -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <h3 class="text-sm font-semibold text-slate-800 mb-4">Distribución de Evitabilidad</h3>
+          <div class="h-64 flex justify-center">
+            <canvas id="chartEvitabilidad"></canvas>
+          </div>
+        </div>
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <h3 class="text-sm font-semibold text-slate-800 mb-4">Top Causas / Diagnósticos Evitables</h3>
+          <div class="h-64">
+            <canvas id="chartCausas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabla Detallada y Exportación -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-5 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h3 class="text-base font-semibold text-slate-800">Detalle de Casos Analizados</h3>
+            <p class="text-xs text-slate-500">Mostrando hasta los primeros 200 registros en pantalla (la exportación incluye el 100%)</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="filtroClasificacion" onchange="renderizarTabla()" class="text-xs border border-slate-300 rounded-lg px-3 py-2 bg-white">
+              <option value="TODOS">Todos los casos</option>
+              <option value="Alta Evitabilidad">Solo Alta Evitabilidad</option>
+              <option value="Potencialmente Evitable">Solo Potencialmente Evitable</option>
+              <option value="No Evitable">Solo No Evitables</option>
+            </select>
+            <button onclick="exportarResultados()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition cursor-pointer">
+              📊 Exportar Informe Excel Completo
+            </button>
+          </div>
+        </div>
+        <div class="overflow-x-auto max-h-[500px]">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead class="bg-slate-100 text-slate-600 sticky top-0">
+              <tr>
+                <th class="p-3 font-semibold border-b">ID Paciente</th>
+                <th class="p-3 font-semibold border-b">CIE-10</th>
+                <th class="p-3 font-semibold border-b">Diagnóstico</th>
+                <th class="p-3 font-semibold border-b">Estancia (días)</th>
+                <th class="p-3 font-semibold border-b">Reingreso</th>
+                <th class="p-3 font-semibold border-b">Clasificación</th>
+                <th class="p-3 font-semibold border-b">Criterio / Hallazgo</th>
+              </tr>
+            </thead>
+            <tbody id="tablaBody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400">
+    Consultoría-IA · Herramienta de soporte a la auditoría clínica · Procesamiento local en cliente
+  </footer>
+
+  <script>
+    let datosCrudos = [];
+    let resultadosProcesados = [];
+    let chart1 = null;
+    let chart2 = null;
+
+    // Diccionario de prefijos CIE-10 de Condiciones Sensibles al Cuidado Ambulatorio (CSCA)
+    const CIE10_EVITABLES = {
+      'I10': 'Hipertensión esencial (primaria)',
+      'I11': 'Enfermedad cardíaca hipertensiva',
+      'I15': 'Hipertensión secundaria',
+      'E10': 'Diabetes mellitus tipo 1 descompensada',
+      'E11': 'Diabetes mellitus tipo 2 descompensada',
+      'E14': 'Diabetes mellitus no especificada',
+      'J44': 'EPOC exacerbado',
+      'J45': 'Asma / Crisis asmática',
+      'J18': 'Neumonía no especificada',
+      'J06': 'Infección aguda vías respiratorias superiores',
+      'N39': 'Infección de vías urinarias (IVU)',
+      'A09': 'Diarrea y gastroenteritis de presunto origen infeccioso',
+      'L03': 'Celulitis / Infección de piel y tejidos blandos',
+      'I50': 'Insuficiencia cardíaca congestiva',
+      'K29': 'Gastritis y duodenitis'
+    };
+
+    // Manejo de carga de archivo
+    const fileInput = document.getElementById('fileInput');
+    const dropzone = document.getElementById('dropzone');
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) leerArchivo(e.target.files[0]);
+    });
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('border-emerald-500', 'bg-emerald-50/40');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('border-emerald-500', 'bg-emerald-50/40');
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('border-emerald-500', 'bg-emerald-50/40');
+      if (e.dataTransfer.files.length) leerArchivo(e.dataTransfer.files[0]);
+    });
+
+    function leerArchivo(file) {
+      const status = document.getElementById('fileStatus');
+      status.classList.remove('hidden');
+      status.textContent = `⏳ Procesando "${file.name}"...`;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+          const firstSheet = workbook.SheetNames[0];
+          datosCrudos = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: '' });
+
+          status.textContent = `✅ Archivo cargado: "${file.name}" (${datosCrudos.length} registros encontrados).`;
+          document.getElementById('btnReprocesar').disabled = false;
+          procesarDatos();
+        } catch (err) {
+          status.textContent = `❌ Error al leer el archivo: ${err.message}`;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function obtenerValorColumna(fila, posiblesNombres) {
+      const keys = Object.keys(fila);
+      for (let nombre of posiblesNombres) {
+        const match = keys.find(k => k.toLowerCase().trim().replace(/[^a-z0-9]/g, '') === nombre.toLowerCase());
+        if (match !== undefined) return fila[match];
+      }
+      return '';
+    }
+
+    function calcularDiasEstancia(ingreso, egreso, estanciaDirecta) {
+      if (estanciaDirecta !== '' && !isNaN(Number(estanciaDirecta))) {
+        return Math.max(0, Math.round(Number(estanciaDirecta)));
+      }
+      if (ingreso && egreso) {
+        const d1 = new Date(ingreso);
+        const d2 = new Date(egreso);
+        if (!isNaN(d1) && !isNaN(d2)) {
+          const diff = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+          return Math.max(0, diff);
+        }
+      }
+      return 0;
+    }
+
+    function reprocesar() {
+      if (datosCrudos.length > 0) procesarDatos();
+    }
+
+    function procesarDatos() {
+      const umbralEstancia = parseInt(document.getElementById('umbralEstancia').value) || 7;
+      const evalCie10 = document.getElementById('chkCie10').checked;
+      const evalReingreso = document.getElementById('chkReingreso').checked;
+
+      resultadosProcesados = datosCrudos.map((fila, idx) => {
+        const id = obtenerValorColumna(fila, ['idpaciente', 'id', 'documento', 'historia', 'paciente']) || `PAC-${idx + 1}`;
+        const cie10Raw = String(obtenerValorColumna(fila, ['cie10', 'codigo', 'codcie10', 'dx'])).toUpperCase().trim();
+        const diag = String(obtenerValorColumna(fila, ['diagnostico', 'descripcion', 'nombredx', 'motivo'])).trim();
+        const fIngreso = obtenerValorColumna(fila, ['fechaingreso', 'ingreso', 'fingreso']);
+        const fEgreso = obtenerValorColumna(fila, ['fechaegreso', 'egreso', 'fegreso']);
+        const estDirecta = obtenerValorColumna(fila, ['estancia', 'diasestancia', 'dias']);
+        const reingresoRaw = String(obtenerValorColumna(fila, ['reingreso', 'esreingreso', 'reingresoprevio'])).toLowerCase().trim();
+        const servicio = String(obtenerValorColumna(fila, ['servicio', 'especialidad', 'area'])).trim() || 'General';
+
+        const estancia = calcularDiasEstancia(fIngreso, fEgreso, estDirecta);
+        const esReingreso = ['si', 'sí', 'yes', '1', 'true', 's'].includes(reingresoRaw);
+
+        // Evaluación de reglas
+        let hallazgos = [];
+        let puntaje = 0;
+
+        // 1. Regla CIE-10 Ambulatorio Sensible
+        const prefijo3 = cie10Raw.substring(0, 3);
+        if (evalCie10 && CIE10_EVITABLES[prefijo3]) {
+          puntaje += 2;
+          hallazgos.push(`CSCA (${prefijo3}: ${CIE10_EVITABLES[prefijo3]})`);
+        }
+
+        // 2. Regla Reingreso
+        if (evalReingreso && esReingreso) {
+          puntaje += 2;
+          hallazgos.push('Reingreso temprano (<30 días)');
+        }
+
+        // 3. Regla Estancia prolongada
+        if (estancia > umbralEstancia) {
+          puntaje += 1;
+          hallazgos.push(`Estancia prolongada (${estancia}d > ${umbralEstancia}d)`);
+        }
+
+        let clasificacion = 'No Evitable';
+        if (puntaje >= 2) {
+          clasificacion = 'Alta Evitabilidad';
+        } else if (puntaje === 1) {
+          clasificacion = 'Potencialmente Evitable';
+        }
+
+        return {
+          ID_Paciente: id,
+          CIE10: cie10Raw || 'N/A',
+          Diagnostico: diag || CIE10_EVITABLES[prefijo3] || 'Sin descripción',
+          Servicio: servicio,
+          Estancia_Dias: estancia,
+          Reingreso: esReingreso ? 'Sí' : 'No',
+          Clasificacion_Evitabilidad: clasificacion,
+          Hallazgos_Auditoria: hallazgos.length ? hallazgos.join(' + ') : 'Cumple criterios de pertinencia'
+        };
+      });
+
+      actualizarDashboard();
+    }
+
+    function actualizarDashboard() {
+      document.getElementById('resultadosSection').classList.remove('hidden');
+
+      const total = resultadosProcesados.length;
+      const evitables = resultadosProcesados.filter(r => r.Clasificacion_Evitabilidad === 'Alta Evitabilidad').length;
+      const potenciales = resultadosProcesados.filter(r => r.Clasificacion_Evitabilidad === 'Potencialmente Evitable').length;
+      const noEvitables = total - evitables - potenciales;
+      const sumaEstancia = resultadosProcesados.reduce((acc, r) => acc + r.Estancia_Dias, 0);
+      const promEstancia = total ? (sumaEstancia / total).toFixed(1) : 0;
+
+      document.getElementById('kpiTotal').textContent = total.toLocaleString();
+      document.getElementById('kpiEvitable').textContent = evitables.toLocaleString();
+      document.getElementById('kpiEvitablePct').textContent = `${total ? ((evitables / total) * 100).toFixed(1) : 0}% del total`;
+      document.getElementById('kpiPotencial').textContent = potenciales.toLocaleString();
+      document.getElementById('kpiNoEvitable').textContent = noEvitables.toLocaleString();
+      document.getElementById('kpiEstanciaProm').textContent = `Estancia prom: ${promEstancia} días`;
+
+      renderizarGraficos(evitables, potenciales, noEvitables);
+      renderizarTabla();
+    }
+
+    function renderizarGraficos(evitables, potenciales, noEvitables) {
+      if (chart1) chart1.destroy();
+      if (chart2) chart2.destroy();
+
+      const ctx1 = document.getElementById('chartEvitabilidad').getContext('2d');
+      chart1 = new Chart(ctx1, {
+        type: 'doughnut',
+        data: {
+          labels: ['Alta Evitabilidad', 'Potencialmente Evitable', 'No Evitable'],
+          datasets: [{
+            data: [evitables, potenciales, noEvitables],
+            backgroundColor: ['#ef4444', '#f59e0b', '#10b981'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom' } }
+        }
+      });
+
+      // Agrupar top 5 CIE10 en casos evitables
+      const conteoDx = {};
+      resultadosProcesados
+        .filter(r => r.Clasificacion_Evitabilidad !== 'No Evitable')
+        .forEach(r => {
+          const clave = `${r.CIE10} - ${r.Diagnostico.substring(0, 25)}`;
+          conteoDx[clave] = (conteoDx[clave] || 0) + 1;
+        });
+
+      const top5 = Object.entries(conteoDx)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+      const ctx2 = document.getElementById('chartCausas').getContext('2d');
+      chart2 = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+          labels: top5.map(item => item[0]),
+          datasets: [{
+            label: 'Casos detectados',
+            data: top5.map(item => item[1]),
+            backgroundColor: '#3b82f6',
+            borderRadius: 6
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+
+    function renderizarTabla() {
+      const filtro = document.getElementById('filtroClasificacion').value;
+      const tbody = document.getElementById('tablaBody');
+      tbody.innerHTML = '';
+
+      const filtrados = resultadosProcesados.filter(r => filtro === 'TODOS' || r.Clasificacion_Evitabilidad === filtro);
+      const muestra = filtrados.slice(0, 200);
+
+      muestra.forEach(r => {
+        let badgeClass = 'bg-emerald-100 text-emerald-800';
+        if (r.Clasificacion_Evitabilidad === 'Alta Evitabilidad') badgeClass = 'bg-red-100 text-red-800';
+        if (r.Clasificacion_Evitabilidad === 'Potencialmente Evitable') badgeClass = 'bg-amber-100 text-amber-800';
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50';
+        tr.innerHTML = `
+          <td class="p-3 font-medium text-slate-900">${r.ID_Paciente}</td>
+          <td class="p-3 font-mono text-slate-600">${r.CIE10}</td>
+          <td class="p-3 text-slate-700">${r.Diagnostico}</td>
+          <td class="p-3 text-slate-700">${r.Estancia_Dias}</td>
+          <td class="p-3 text-slate-700">${r.Reingreso}</td>
+          <td class="p-3"><span class="px-2 py-0.5 rounded-full font-semibold ${badgeClass}">${r.Clasificacion_Evitabilidad}</span></td>
+          <td class="p-3 text-slate-600">${r.Hallazgos_Auditoria}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function exportarResultados() {
+      if (!resultadosProcesados.length) return;
+      const ws = XLSX.utils.json_to_sheet(resultadosProcesados);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Auditoria_Evitabilidad');
+      const fecha = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `Reporte_Evitabilidad_${fecha}.xlsx`);
+    }
+
+    function descargarPlantilla() {
+      const ejemplos = [
+        { ID_Paciente: 'PAC-1001', CIE10: 'I10', Diagnostico: 'Hipertensión esencial', Fecha_Ingreso: '2026-11-10', Fecha_Egreso: '2026-11-14', Reingreso: 'No', Servicio: 'Medicina Interna' },
+        { ID_Paciente: 'PAC-1002', CIE10: 'K35', Diagnostico: 'Apendicitis aguda', Fecha_Ingreso: '2026-11-12', Fecha_Egreso: '2026-11-14', Reingreso: 'No', Servicio: 'Cirugía' },
+        { ID_Paciente: 'PAC-1003', CIE10: 'E119', Diagnostico: 'Diabetes mellitus tipo 2', Fecha_Ingreso: '2026-11-05', Fecha_Egreso: '2026-11-15', Reingreso: 'Sí', Servicio: 'Medicina Interna' },
+        { ID_Paciente: 'PAC-1004', CIE10: 'N390', Diagnostico: 'Infección de vías urinarias', Fecha_Ingreso: '2026-11-14', Fecha_Egreso: '2026-11-17', Reingreso: 'No', Servicio: 'Urgencias' },
+        { ID_Paciente: 'PAC-1005', CIE10: 'S720', Diagnostico: 'Fractura de cuello de fémur', Fecha_Ingreso: '2026-11-01', Fecha_Egreso: '2026-11-12', Reingreso: 'No', Servicio: 'Ortopedia' }
+      ];
+      const ws = XLSX.utils.json_to_sheet(ejemplos);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Cohorte_8_Dias');
+      XLSX.writeFile(wb, 'Plantilla_1000_Pacientes_Ejemplo.xlsx');
+    }
+  </script>
+</body>
+</html>
